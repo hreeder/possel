@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf8 -*-
 import collections
+import importlib
 import pprint
 
 import chardet
 import logbook
-from tornado import gen, ioloop, tcpclient
 
 import possel
 
 logger = logbook.Logger(__name__)
-loopinstance = ioloop.IOLoop.instance()
 
 
 class Error(possel.Error):
@@ -44,6 +43,67 @@ class KeyDefaultDict(collections.defaultdict):
 
 def split_irc_line(s):
     """Breaks a message from an IRC server into its prefix, command, and arguments.
+
+    Copied straight from twisted, license and copyright for this function follows:
+    Copyright (c) 2001-2014
+    Allen Short
+    Andy Gayton
+    Andrew Bennetts
+    Antoine Pitrou
+    Apple Computer, Inc.
+    Ashwini Oruganti
+    Benjamin Bruheim
+    Bob Ippolito
+    Canonical Limited
+    Christopher Armstrong
+    David Reid
+    Donovan Preston
+    Eric Mangold
+    Eyal Lotem
+    Google Inc.
+    Hybrid Logic Ltd.
+    Hynek Schlawack
+    Itamar Turner-Trauring
+    James Knight
+    Jason A. Mobarak
+    Jean-Paul Calderone
+    Jessica McKellar
+    Jonathan Jacobs
+    Jonathan Lange
+    Jonathan D. Simms
+    Jürgen Hermann
+    Julian Berman
+    Kevin Horn
+    Kevin Turner
+    Laurens Van Houtven
+    Mary Gardiner
+    Matthew Lefkowitz
+    Massachusetts Institute of Technology
+    Moshe Zadka
+    Paul Swartz
+    Pavel Pergamenshchik
+    Ralph Meijer
+    Richard Wall
+    Sean Riley
+    Software Freedom Conservancy
+    Travis B. Hartwell
+    Thijs Triemstra
+    Thomas Herve
+    Timothy Allen
+    Tom Prince
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+    documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+    rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+    permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
+    Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+    WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
+    OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     """
     prefix = ''
     trailing = []
@@ -80,37 +140,6 @@ def get_symbolic_command(command):
             raise UnknownNumericCommandError("No numeric command found: '{}'".format(command)) from e
     else:
         return command
-
-
-class LineStream:
-    def __init__(self):
-        self.tcp_client_factory = tcpclient.TCPClient()
-        self.line_callback = None
-        self.connect_callback = None
-
-    @gen.coroutine
-    def connect(self, host, port):
-        logger.debug('Connecting to server {}:{}', host, port)
-        self.connection = yield self.tcp_client_factory.connect(host, port)
-        logger.debug('Connected')
-        if self.connect_callback is not None:
-            self.connect_callback()
-            logger.debug('Called post-connection callback')
-        self._schedule_line()
-
-    def handle_line(self, line):
-        if self.line_callback is not None:
-            self.line_callback(line)
-
-        self._schedule_line()
-
-    def _schedule_line(self):
-        self.connection.read_until(b'\n', self.handle_line)
-
-    def write_function(self, line):
-        if line[-1] != '\n':
-            line += '\n'
-        return self.connection.write(line.encode('utf8'))
 
 
 class IRCServerHandler:
@@ -186,8 +215,9 @@ class IRCServerHandler:
         try:
             line = str(line, encoding='utf8')
         except UnicodeDecodeError:
+            logger.debug('UTF8 decode failed, bytes: {}', line)
             encoding = chardet.detect(line)['encoding']
-            logger.debug('UTF8 decode failed, tried autodetecting and got {}, decoding now', encoding)
+            logger.debug('Tried autodetecting and got {}, decoding now', encoding)
             line = str(line, encoding=encoding)
         line = line.strip()
         (prefix, command, args) = split_irc_line(line)
@@ -569,6 +599,12 @@ symbolic_to_numeric = {
 numeric_to_symbolic = {v: k for k, v in symbolic_to_numeric.items()}
 
 
+VALID_ADAPTERS = {
+    'tornado': 'possel.adapter.tornado',
+    'asyncio': 'possel.adapter.asyncio',
+}
+
+
 def _exc_exit(unused_callback):
     import sys
     import traceback
@@ -595,6 +631,8 @@ def get_arg_parser():
                             help='Exit program when an unhandled exception occurs, rather than trying to recover')
     arg_parser.add_argument('--debug-out-loud', action='store_true',
                             help='Print selected debug messages out over IRC')
+    arg_parser.add_argument('-a', '--adapter', default='tornado', choices=VALID_ADAPTERS.keys(),
+                            help='Which async adapter to use.')
     return arg_parser
 
 
@@ -608,45 +646,19 @@ def get_parsed_args():
     return args
 
 
-def get_attached_instances(args):
-    # Create instances
-    line_stream = LineStream()
-    server_handler = IRCServerHandler(User(args.nick, args.username, args.real_name),
-                                      debug_out_loud=args.debug_out_loud)
-
-    # Attach instances
-    server_handler.write_function = line_stream.write_function
-    line_stream.connect_callback = server_handler.pre_line
-    line_stream.line_callback = server_handler.handle_line
-
-    if args.die_on_exception:
-        loopinstance.handle_callback_exception = _exc_exit
-
-    return line_stream, server_handler
-
-
-def connect(args, line_stream, server_handler):
-    # Connect
-    line_stream.connect(args.server, 6667)
-
-    # Join channels
-    for channel in args.channel:
-        loopinstance.call_later(2, server_handler.channels[channel].join)
-
-
 def main():
     args = get_parsed_args()
-
-    line_stream, server_handler = get_attached_instances()
-
-    connect(args, line_stream, server_handler)
 
     # setup logging
     loghandler = logbook.StderrHandler(level=logbook.DEBUG if args.debug else logbook.INFO)
 
-    # GOGOGOGO
-    with loghandler.applicationbound():
-        loopinstance.start()
+    # Get server handler
+    server_handler = IRCServerHandler(User(args.nick, args.username, args.real_name), args.debug_out_loud)
+
+    # Get adapter and connect
+    adapter = importlib.import_module(VALID_ADAPTERS[args.adapter])
+    adapter.connect(args, server_handler, loghandler)
+
 
 if __name__ == '__main__':
     main()
