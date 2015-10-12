@@ -1,0 +1,24 @@
+<div id="line">
+    <span class="date column">{{timestamp}}</span>
+    <span class="nick column mid-column" style="color: {{user.color}};">{{line.nick}}</span>
+    <span class="message column mid-column">{{line.content}}</span>
+</div>
+
+<div id="prepopulate_line">
+  <div id='line-{{line_id}}' class="buffer-line">
+  </div>
+</div>
+
+<div id="nav_item">
+  {{#if system}}
+  <li role="presentation" id="server-buffer-link-{{buffer.server}}" class="nav-buffer-system">
+  {{else}}
+  <li role="presentation" class="nav-buffer-normal">
+  {{/if}}
+    <a href="#{{buffer.id}}" role="tab" data-toggle="tab" aria-controls="{{buffer.id}}">{{buffer.name}}</a>
+  </li>
+</div>
+
+<div id="buffer_pane">
+  <div id="{{buffer.id}}" class="buffer tab-pane" role="tabpanel"></div>
+</div>

@@ -7,10 +7,10 @@ from setuptools import setup
 import possel
 
 install_requires = [
-    'chardet',
-    'logbook',
-    'pyzmq',
-    'tornado',
+    'pircel',
+    'tornado>=4.2.1',
+    'cryptography>=0.2.1',
+    'pyopenssl',
 ]
 
 classifiers = [
