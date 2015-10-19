@@ -1,0 +1,11 @@
+port: 8080                            # Port for Possel to run on
+address: 0.0.0.0                      # Address for Possel to bind to (use 0.0.0.0 to listen on all interfaces)
+ssl:
+  enabled: no                         # Enable SSL [yes/no]
+  certificate: /etc/possel/cert.pem   # Certificate file for Possel's SSL Server
+database:
+  type: sqlite                        # Supported types are sqlite
+  database: possel.db                 # this should be a location if using sqlite
+  hostname: localhost                 # Hostname for database server, unused if using sqlite
+  username: unused                    # Username for database server, unused if using sqlite
+  password: unused                    # Password for database server, unused if using sqlite
