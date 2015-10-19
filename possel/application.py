@@ -6,6 +6,7 @@ import logging
 import os
 import socket
 import ssl
+import yaml
 
 from OpenSSL import crypto
 from pircel import model, tornado_adapter
@@ -58,9 +59,9 @@ def generate_cert():
         return cert_string, key_string
 
 
-def get_ssl_context(args):
+def get_ssl_context(certificate):
     ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    ssl_ctx.load_cert_chain(args.certificate, args.certificate.replace('crt', 'key'))
+    ssl_ctx.load_cert_chain(certificate, certificate.replace('crt', 'key'))
     return ssl_ctx
 
 
@@ -82,20 +83,10 @@ def get_etc_file(filename):
 
 def get_arg_parser():
     arg_parser = argparse.ArgumentParser(description='Possel Server')
-    arg_parser.add_argument('-d', '--database', default='sqlite:///possel.db',
-                            help='sqlalchemy-style database url string. See '
-                            'http://peewee.readthedocs.org/en/latest/peewee/playhouse.html#db-url '
-                            'for specification.')
-    arg_parser.add_argument('-p', '--port', default=80,
-                            help='Port possel server will listen on')
-    arg_parser.add_argument('-b', '--bind-address', default='',
-                            help='Address possel server will listen on (e.g. 0.0.0.0 for IPv4)')
+    arg_parser.add_argument('-c', '--config', default='config.yml',
+                            help='Path to configuration file')
     arg_parser.add_argument('-D', '--debug', action='store_true',
                             help='Turn on debug logging and show exceptions in the browser')
-    arg_parser.add_argument('-c', '--certificate', default=get_etc_file('cert.pem'),
-                            help='The X.509 certificate to present to clients')
-    arg_parser.add_argument('-s', '--secure', action='store_true',
-                            help='Enable SSL on the web server')
     arg_parser.add_argument('--log-irc', action='store_true',
                             help='Log lines from IRC verbatim in addition to any other logging')
     arg_parser.add_argument('--log-database', action='store_true',
@@ -110,7 +101,11 @@ def get_arg_parser():
 def main():
     args = get_arg_parser().parse_args()
 
-    # <setup logging>
+    # Load config
+    with open(args.config, 'r') as configfile:
+        posselcfg = yaml.load(configfile)
+
+        # <setup logging>
     log_level = logging.DEBUG if args.debug else logging.INFO
     log_date_format = "%Y-%m-%d %H:%M:%S"
     log_format = "%(asctime)s\t%(levelname)s\t%(module)s:%(funcName)s:%(lineno)d\t%(message)s"
@@ -127,9 +122,14 @@ def main():
     logging.getLogger('pircel.protocol.verbatim').setLevel(verbatim_log_level)
     # </setup logging>
 
-    settings['debug'] = args.debug
+    settings['debug'] = posselcfg['logging']['debug']
 
-    db = db_url.connect(args.database)
+    if posselcfg['database']['type'] == "sqlite":
+        dburl = "sqlite:///" + posselcfg['database']['database']
+    else:
+        dburl = "sqlite:///possel.db"
+
+    db = db_url.connect(dburl)
     model.database.initialize(db)
     model.database.connect()
     model.initialize()
@@ -141,10 +141,10 @@ def main():
     for client in clients.values():
         client.connect()
 
-    ssl_ctx = get_ssl_context(args) if args.secure else None
+    ssl_ctx = get_ssl_context(posselcfg['ssl']['certificate']) if posselcfg['ssl']['enabled'] else None
 
     application = tornado.web.Application(get_routes(interfaces), **settings)
-    application.listen(args.port, args.bind_address, ssl_options=ssl_ctx)
+    application.listen(posselcfg['port'], posselcfg['address'], ssl_options=ssl_ctx)
 
     tornado.ioloop.IOLoop.current().start()
 

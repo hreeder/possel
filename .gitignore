@@ -54,3 +54,6 @@ target/
 
 # Ctags
 tags
+
+# Configuration
+config.yml
