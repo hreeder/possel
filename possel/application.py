@@ -6,7 +6,6 @@ import logging
 import os
 import socket
 import ssl
-import yaml
 
 from OpenSSL import crypto
 from pircel import model, tornado_adapter
@@ -83,10 +82,22 @@ def get_etc_file(filename):
 
 def get_arg_parser():
     arg_parser = argparse.ArgumentParser(description='Possel Server')
+    arg_parser.add_argument('-d', '--database', default='sqlite:///possel.db',
+                            help='sqlalchemy-style database url string. See '
+                            'http://peewee.readthedocs.org/en/latest/peewee/playhouse.html#db-url '
+                            'for specification.')
+    arg_parser.add_argument('-p', '--port', default=80,
+                            help='Port possel server will listen on')
+    arg_parser.add_argument('-b', '--bind-address', default='',
+                            help='Address possel server will listen on (e.g. 0.0.0.0 for IPv4)')
     arg_parser.add_argument('-c', '--config', default='config.yml',
                             help='Path to configuration file')
     arg_parser.add_argument('-D', '--debug', action='store_true',
                             help='Turn on debug logging and show exceptions in the browser')
+    arg_parser.add_argument('-e', '--certificate', default=get_etc_file('cert.pem'),
+                            help='The X.509 certificate to present to clients')
+    arg_parser.add_argument('-s', '--secure', action='store_true',
+                            help='Enable SSL on the web server')
     arg_parser.add_argument('--log-irc', action='store_true',
                             help='Log lines from IRC verbatim in addition to any other logging')
     arg_parser.add_argument('--log-database', action='store_true',
