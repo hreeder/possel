@@ -134,11 +134,15 @@ def main():
     logging.getLogger('pircel.protocol.verbatim').setLevel(verbatim_log_level)
     # </setup logging>
 
-    settings['debug'] = posselcfg['debug']
+    settings['debug'] = posselcfg.debug
 
-    if posselcfg['database']['type'] == "sqlite":
+    if args.database:
+        # Prioritize argparse override
+        dburl = args.database
+    elif posselcfg['database']['type'] == "sqlite":
         dburl = "sqlite:///" + posselcfg['database']['database']
     else:
+        # Fallback to SQLite in default location
         dburl = "sqlite:///possel.db"
 
     db = db_url.connect(dburl)
