@@ -17,7 +17,7 @@ import tornado.ioloop
 import tornado.web
 from tornado.web import url
 
-from possel import auth, push, resources, web_client
+from possel import auth, push, resources, web_client, config
 
 
 def get_routes(interfaces):
@@ -102,27 +102,28 @@ def main():
     args = get_arg_parser().parse_args()
 
     # Load config
-    with open(args.config, 'r') as configfile:
-        posselcfg = yaml.load(configfile)
+    posselcfg = config.PosselConfig(settings)
+    posselcfg.read_config(args.config)
+    posselcfg.update_from_argparse(args)
 
-        # <setup logging>
-    log_level = logging.DEBUG if args.debug else logging.INFO
+    # <setup logging>
+    log_level = logging.DEBUG if posselcfg.debug else logging.INFO
     log_date_format = "%Y-%m-%d %H:%M:%S"
     log_format = "%(asctime)s\t%(levelname)s\t%(module)s:%(funcName)s:%(lineno)d\t%(message)s"
     logging.basicConfig(level=log_level, format=log_format, datefmt=log_date_format)
     logging.captureWarnings(True)
 
-    database_log_level = logging.DEBUG if args.log_database and args.log_insecure else logging.INFO
+    database_log_level = logging.DEBUG if posselcfg.log_database and posselcfg.log_insecure else logging.INFO
     logging.getLogger('peewee').setLevel(database_log_level)
 
-    insecure_log_level = logging.DEBUG if args.log_insecure else logging.INFO
+    insecure_log_level = logging.DEBUG if posselcfg.log_insecure else logging.INFO
     logging.getLogger('insecure').setLevel(insecure_log_level)
 
-    verbatim_log_level = logging.DEBUG if args.log_irc else logging.INFO
+    verbatim_log_level = logging.DEBUG if posselcfg.log_irc else logging.INFO
     logging.getLogger('pircel.protocol.verbatim').setLevel(verbatim_log_level)
     # </setup logging>
 
-    settings['debug'] = posselcfg['logging']['debug']
+    settings['debug'] = posselcfg['debug']
 
     if posselcfg['database']['type'] == "sqlite":
         dburl = "sqlite:///" + posselcfg['database']['database']
