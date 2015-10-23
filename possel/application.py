@@ -148,7 +148,7 @@ def main():
     for client in clients.values():
         client.connect()
 
-    ssl_ctx = get_ssl_context(possel_cfg['ssl']['certificate']) if possel_cfg['ssl']['enabled'] else None
+    ssl_ctx = get_ssl_context(possel_cfg.certificate) if possel_cfg.secure else None
 
     application = tornado.web.Application(get_routes(interfaces), **settings)
     application.listen(possel_cfg.port, possel_cfg.bind_address, ssl_options=ssl_ctx)
