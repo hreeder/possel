@@ -2,8 +2,11 @@ import yaml
 
 
 class Configuration:
-    def __init__(self, default={}):
-        self.config = default
+    def __init__(self, default=None):
+        if default:
+            self.config = default
+        else:
+            self.config = {}
 
     def read_configuration(self, config):
         with open(config, 'r') as configfile:
