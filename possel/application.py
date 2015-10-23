@@ -16,7 +16,7 @@ import tornado.ioloop
 import tornado.web
 from tornado.web import url
 
-from possel import auth, push, resources, web_client, config
+from possel import auth, push, resources, web_client, configuration
 
 
 def get_routes(interfaces):
@@ -82,13 +82,13 @@ def get_etc_file(filename):
 
 def get_arg_parser():
     arg_parser = argparse.ArgumentParser(description='Possel Server')
-    arg_parser.add_argument('-d', '--database', default='sqlite:///possel.db',
+    arg_parser.add_argument('-d', '--database',
                             help='sqlalchemy-style database url string. See '
                             'http://peewee.readthedocs.org/en/latest/peewee/playhouse.html#db-url '
                             'for specification.')
-    arg_parser.add_argument('-p', '--port', default=80,
+    arg_parser.add_argument('-p', '--port',
                             help='Port possel server will listen on')
-    arg_parser.add_argument('-b', '--bind-address', default='',
+    arg_parser.add_argument('-b', '--bind-address',
                             help='Address possel server will listen on (e.g. 0.0.0.0 for IPv4)')
     arg_parser.add_argument('-c', '--config', default='config.yml',
                             help='Path to configuration file')
@@ -113,39 +113,30 @@ def main():
     args = get_arg_parser().parse_args()
 
     # Load config
-    posselcfg = config.PosselConfig(settings)
-    posselcfg.read_config(args.config)
-    posselcfg.update_from_argparse(args)
+    possel_cfg = configuration.Configuration(settings)
+    possel_cfg.read_configuration(args.config)
+    possel_cfg.update_from_argparse(args)
 
     # <setup logging>
-    log_level = logging.DEBUG if posselcfg.debug else logging.INFO
+    log_level = logging.DEBUG if possel_cfg.debug else logging.INFO
     log_date_format = "%Y-%m-%d %H:%M:%S"
     log_format = "%(asctime)s\t%(levelname)s\t%(module)s:%(funcName)s:%(lineno)d\t%(message)s"
     logging.basicConfig(level=log_level, format=log_format, datefmt=log_date_format)
     logging.captureWarnings(True)
 
-    database_log_level = logging.DEBUG if posselcfg.log_database and posselcfg.log_insecure else logging.INFO
+    database_log_level = logging.DEBUG if possel_cfg.log_database and possel_cfg.log_insecure else logging.INFO
     logging.getLogger('peewee').setLevel(database_log_level)
 
-    insecure_log_level = logging.DEBUG if posselcfg.log_insecure else logging.INFO
+    insecure_log_level = logging.DEBUG if possel_cfg.log_insecure else logging.INFO
     logging.getLogger('insecure').setLevel(insecure_log_level)
 
-    verbatim_log_level = logging.DEBUG if posselcfg.log_irc else logging.INFO
+    verbatim_log_level = logging.DEBUG if possel_cfg.log_irc else logging.INFO
     logging.getLogger('pircel.protocol.verbatim').setLevel(verbatim_log_level)
     # </setup logging>
 
-    settings['debug'] = posselcfg.debug
+    settings['debug'] = possel_cfg.debug
 
-    if args.database:
-        # Prioritize argparse override
-        dburl = args.database
-    elif posselcfg['database']['type'] == "sqlite":
-        dburl = "sqlite:///" + posselcfg['database']['database']
-    else:
-        # Fallback to SQLite in default location
-        dburl = "sqlite:///possel.db"
-
-    db = db_url.connect(dburl)
+    db = db_url.connect(possel_cfg.database)
     model.database.initialize(db)
     model.database.connect()
     model.initialize()
@@ -157,10 +148,10 @@ def main():
     for client in clients.values():
         client.connect()
 
-    ssl_ctx = get_ssl_context(posselcfg['ssl']['certificate']) if posselcfg['ssl']['enabled'] else None
+    ssl_ctx = get_ssl_context(possel_cfg['ssl']['certificate']) if possel_cfg['ssl']['enabled'] else None
 
     application = tornado.web.Application(get_routes(interfaces), **settings)
-    application.listen(posselcfg.port, posselcfg.bind_address, ssl_options=ssl_ctx)
+    application.listen(possel_cfg.port, possel_cfg.bind_address, ssl_options=ssl_ctx)
 
     tornado.ioloop.IOLoop.current().start()
 
