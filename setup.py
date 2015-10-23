@@ -11,7 +11,7 @@ install_requires = [
     'tornado>=4.2.1',
     'cryptography>=0.2.1',
     'pyopenssl',
-    'PyYAML'
+    'PyYAML >= 3.11, < 4'
 ]
 
 classifiers = [
