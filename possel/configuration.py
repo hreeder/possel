@@ -3,10 +3,7 @@ import yaml
 
 class Configuration:
     def __init__(self, default=None):
-        if default:
-            self.config = default
-        else:
-            self.config = {}
+        self.config = default or {}
 
     def read_configuration(self, config):
         with open(config, 'r') as configfile:
@@ -16,18 +13,13 @@ class Configuration:
         for key in args.__dict__:
             if args.__dict__[key]:
                 self.config[key] = args.__dict__[key]
+            # If there's a key in argparse, but it doesn't have a corresponding key in the config
+            # Create the key in the config, as it is still a configuration value
+            elif key not in self.config:
+                self.config[key] = None
 
-    # Trying and excepting on KeyError allows us to do things like
-    # "if config.value" and have it return False if the value has not been set
-    # In this case, if a default should be true, pass the key/value pair in the default config
     def __getattr__(self, item):
-        try:
-            return self.config[item]
-        except KeyError:
-            return False
+        return self.config[item]
 
     def __getitem__(self, item):
-        try:
-            return self.config[item]
-        except KeyError:
-            return False
+        return self.config[item]
